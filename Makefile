@@ -1,4 +1,4 @@
-version := "0.0.0"
+version := "0.0.1"
 git_hash := $(shell git rev-parse HEAD | cut -c1-8)
 
 ifneq "${VERSION}" ""
