@@ -18,3 +18,7 @@ test:
 
 fmt:
 	go fmt
+
+build_docker:
+	GOOS=linux CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags "-s -w -X main.VERSION=${version} -s -w -X main.HASH=${git_hash}"
+	docker build -t spider-web .
