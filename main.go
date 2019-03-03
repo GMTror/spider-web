@@ -20,7 +20,7 @@ var (
 	HASH    string = "UNKNOWN"
 
 	version, d    bool
-	level uint
+	level, tries  uint
 	wait, timeout time.Duration
 
 	processedURLs map[string]bool
@@ -35,6 +35,7 @@ func init() {
 	flag.BoolVar(&version, "version", false, "print the version and exit")
 	flag.BoolVar(&d, "debug", false, "print debug information")
 	flag.UintVar(&level, "level", 0, "specify recursion maximum depth level depth")
+	flag.UintVar(&tries, "tries", 1, "set number of tries to number")
 	flag.DurationVar(&wait, "wait", time.Millisecond*500, "wait between request")
 	flag.DurationVar(&timeout, "timeout", time.Second*5, "set timeout values")
 	flag.Parse()
@@ -84,12 +85,8 @@ func search(parentUrl *url.URL, lvl int) {
 	if lvl < 0 {
 		return
 	}
-	if processedURLs[parentUrl.String()] {
-		return
-	}
-	processedURLs[parentUrl.String()] = true
 
-	debugf("processing %s:\n", parentUrl)
+	debugf("processing %s", parentUrl)
 
 	body, err := getPage(parentUrl)
 	if err != nil {
@@ -119,6 +116,7 @@ func search(parentUrl *url.URL, lvl int) {
 		} else if chieldUrl.Host == parentUrl.Host {
 			debugf("\t%s\n", chieldUrl.String())
 			if !processedURLs[chieldUrl.String()] {
+				processedURLs[chieldUrl.String()] = true
 				urls = append(urls, chieldUrl)
 			}
 		}
@@ -128,7 +126,7 @@ func search(parentUrl *url.URL, lvl int) {
 	for _, u := range urls {
 		if level == 0 {
 			search(u, lvl)
-		} else if lvl > 0 {
+		} else if lvl > 1 {
 			search(u, lvl-1)
 		}
 	}
@@ -147,21 +145,26 @@ func getPage(u *url.URL) (io.ReadCloser, error) {
 		}
 	}
 
-	if ticker != nil {
-		<-ticker.C
-	}
-
 	debugf("request to %s", u.String())
-	resp, err := c.Get(u.String())
-	if err != nil {
-		return nil, err
+
+	var (
+		resp *http.Response
+		err error
+	)
+	for i := 0; i <= int(tries); i++ {
+		if ticker != nil {
+			<-ticker.C
+		}
+		if resp, err = c.Get(u.String()); err == nil {
+			return resp.Body, nil
+		}
+
+		if wait.Seconds() != 0 {
+			ticker = time.NewTicker(wait)
+		}
 	}
 
-	if wait.Seconds() != 0 {
-		ticker = time.NewTicker(wait)
-	}
-
-	return resp.Body, nil
+	return nil, err
 }
 
 func getUrls(body io.ReadCloser) ([]string, error) {
